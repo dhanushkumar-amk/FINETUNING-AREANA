@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Landing from './pages/Landing';
+import Arena from './pages/Arena';
 
 function App() {
   return (
@@ -12,6 +13,14 @@ function App() {
           element={
             <Layout>
               <Landing />
+            </Layout>
+          } 
+        />
+        <Route 
+          path="/arena" 
+          element={
+            <Layout>
+              <Arena />
             </Layout>
           } 
         />

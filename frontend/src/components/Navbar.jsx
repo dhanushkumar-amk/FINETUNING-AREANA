@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
 export default function Navbar() {
@@ -9,9 +10,9 @@ export default function Navbar() {
       <div className="max-w-7xl mx-auto h-full px-6 flex items-center justify-between">
         {/* Left Side: Logo */}
         <div className="flex items-center space-x-2">
-          <span className="text-lg font-bold text-black tracking-tight select-none">
+          <Link to="/" className="text-lg font-bold text-black tracking-tight select-none hover:opacity-80 transition-opacity">
             ⚔️ FineTune Arena
-          </span>
+          </Link>
         </div>
 
         {/* Desktop Navigation Links */}
@@ -29,9 +30,12 @@ export default function Navbar() {
 
         {/* Desktop CTA Button */}
         <div className="hidden md:block">
-          <button className="h-9 px-4 text-xs font-semibold bg-black text-white rounded-md hover:bg-gray-900 transition-all duration-200 tracking-wide uppercase">
+          <Link 
+            to="/arena" 
+            className="h-9 px-4 text-xs font-semibold bg-black text-white rounded-md hover:bg-gray-900 transition-all duration-200 tracking-wide uppercase inline-flex items-center justify-center"
+          >
             Start Battle
-          </button>
+          </Link>
         </div>
 
         {/* Mobile Menu Button */}
@@ -72,12 +76,13 @@ export default function Navbar() {
           >
             GitHub
           </a>
-          <button
+          <Link
+            to="/arena"
             onClick={() => setIsOpen(false)}
-            className="h-10 w-full text-xs font-semibold bg-black text-white rounded-md hover:bg-gray-900 transition-colors uppercase tracking-wide"
+            className="h-10 w-full text-xs font-semibold bg-black text-white rounded-md hover:bg-gray-900 transition-colors uppercase tracking-wide inline-flex items-center justify-center"
           >
             Start Battle
-          </button>
+          </Link>
         </div>
       )}
     </nav>
