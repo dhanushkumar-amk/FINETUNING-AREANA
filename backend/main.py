@@ -1,5 +1,11 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+
+# Load .env at startup
+load_dotenv()
+
 from routers.battle import router as battle_router
 
 app = FastAPI(title="Finetune Arena API")

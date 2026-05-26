@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Check, ArrowLeft, ArrowRight } from 'lucide-react';
 import ModelSelection from '../components/ModelSelection';
 import DatasetChoice from '../components/DatasetChoice';
+import LiveBattle from '../components/LiveBattle';
 
 const STEPS = [
   { id: 1, label: "Select Models" },
@@ -17,6 +18,7 @@ export default function Arena() {
   const [modelA, setModelA] = useState(null);
   const [modelB, setModelB] = useState(null);
   const [datasetConfig, setDatasetConfig] = useState(null);
+  const [questions, setQuestions] = useState([]);
 
   const handleNext = () => {
     if (currentStep < 4) setCurrentStep(currentStep + 1);
@@ -93,9 +95,18 @@ export default function Arena() {
           </div>
         )}
         {currentStep === 3 && (
-          <div className="w-full text-center animate-in fade-in duration-300">
-            <h2 className="text-xl font-semibold text-black mb-2">Live Battle</h2>
-            <p className="text-sm text-gray-500">Live Battle coming soon</p>
+          <div className="w-full animate-in fade-in duration-300">
+            <LiveBattle
+              modelA={modelA}
+              modelB={modelB}
+              datasetConfig={datasetConfig}
+              onNext={(questionsList) => {
+                setQuestions(questionsList);
+                handleNext();
+              }}
+              onBack={handleBack}
+              domain={modelA?.pipeline || 'Text Generation'}
+            />
           </div>
         )}
         {currentStep === 4 && (
@@ -107,7 +118,7 @@ export default function Arena() {
       </div>
 
       {/* NAVIGATION BUTTONS */}
-      {currentStep !== 1 && currentStep !== 2 && (
+      {currentStep !== 1 && currentStep !== 2 && currentStep !== 3 && (
         <div className="flex items-center justify-between">
           <div>
             {currentStep > 1 && (
