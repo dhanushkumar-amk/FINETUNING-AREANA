@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Check, ArrowLeft, ArrowRight } from 'lucide-react';
+import ModelSelection from '../components/ModelSelection';
 
 const STEPS = [
   { id: 1, label: "Select Models" },
@@ -10,6 +11,11 @@ const STEPS = [
 
 export default function Arena() {
   const [currentStep, setCurrentStep] = useState(1);
+  
+  // State for Wizard Form
+  const [modelA, setModelA] = useState(null);
+  const [modelB, setModelB] = useState(null);
+  const [domain, setDomain] = useState(null);
 
   const handleNext = () => {
     if (currentStep < 4) setCurrentStep(currentStep + 1);
@@ -20,7 +26,7 @@ export default function Arena() {
   };
 
   return (
-    <div className="bg-white py-10 px-4 max-w-4xl mx-auto flex flex-col min-h-[calc(100vh-200px)]">
+    <div className="bg-white py-10 px-4 max-w-4xl mx-auto flex flex-col min-h-[calc(100vh-200px)] animate-in fade-in duration-500">
       {/* TOP STEP INDICATOR */}
       <div className="relative flex items-center justify-between w-full mb-16">
         {/* Thin gray line connecting all steps */}
@@ -61,27 +67,34 @@ export default function Arena() {
       </div>
 
       {/* STAGE CONTENT AREA */}
-      <div className="flex-grow border border-gray-200 rounded-[12px] bg-white p-12 flex flex-col items-center justify-center text-center min-h-[350px] mb-12">
+      <div className="flex-grow border border-gray-200 rounded-[12px] bg-white p-8 md:p-12 flex flex-col items-center justify-center min-h-[350px] mb-12">
         {currentStep === 1 && (
-          <div className="animate-in fade-in duration-300">
-            <h2 className="text-xl font-semibold text-black mb-2">Model Selection</h2>
-            <p className="text-sm text-gray-500">Model Selection coming soon</p>
+          <div className="w-full animate-in fade-in duration-300">
+            <ModelSelection
+              modelA={modelA}
+              setModelA={setModelA}
+              modelB={modelB}
+              setModelB={setModelB}
+              domain={domain}
+              setDomain={setDomain}
+              onSuccess={handleNext}
+            />
           </div>
         )}
         {currentStep === 2 && (
-          <div className="animate-in fade-in duration-300">
+          <div className="w-full text-center animate-in fade-in duration-300">
             <h2 className="text-xl font-semibold text-black mb-2">Dataset Choice</h2>
             <p className="text-sm text-gray-500">Dataset Choice coming soon</p>
           </div>
         )}
         {currentStep === 3 && (
-          <div className="animate-in fade-in duration-300">
+          <div className="w-full text-center animate-in fade-in duration-300">
             <h2 className="text-xl font-semibold text-black mb-2">Live Battle</h2>
             <p className="text-sm text-gray-500">Live Battle coming soon</p>
           </div>
         )}
         {currentStep === 4 && (
-          <div className="animate-in fade-in duration-300">
+          <div className="w-full text-center animate-in fade-in duration-300">
             <h2 className="text-xl font-semibold text-black mb-2">Battle Report</h2>
             <p className="text-sm text-gray-500">Report coming soon</p>
           </div>
@@ -101,7 +114,7 @@ export default function Arena() {
           )}
         </div>
         <div>
-          {currentStep < 4 && (
+          {currentStep > 1 && currentStep < 4 && (
             <button 
               onClick={handleNext}
               className="h-10 px-5 bg-black text-white text-xs font-semibold rounded-md hover:bg-black/90 transition-colors uppercase tracking-wider flex items-center gap-2"
