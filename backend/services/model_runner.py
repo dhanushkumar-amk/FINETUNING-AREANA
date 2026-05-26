@@ -9,10 +9,6 @@ def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
     """
     Runs a single question against a HuggingFace Inference API model.
     """
-    # 8. Add input sanitization before calling API:
-    # - Strip whitespace from question
-    # - Limit question to 500 characters max
-    # - If question empty raise ValueError
     try:
         if not question:
             raise ValueError("Question cannot be empty.")
@@ -31,8 +27,6 @@ def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
         url = f"https://api-inference.huggingface.co/models/{model_id}"
         
         # 3. Set headers:
-        # Authorization: Bearer {HF_TOKEN}
-        # Content-Type: application/json
         headers = {
             "Authorization": f"Bearer {hf_token}",
             "Content-Type": "application/json"
@@ -62,8 +56,6 @@ def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
             
         # 6. Handle response formats:
         # Case 5: model still loading
-        # data = {"error": "Model ... is currently loading"}
-        # return None and set is_loading = True
         if isinstance(data, dict) and "error" in data:
             error_msg = data["error"]
             if isinstance(error_msg, str) and "is currently loading" in error_msg:
@@ -85,8 +77,7 @@ def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
         # Case 2: list with translation_text
         # Case 3: list with summary_text
         # Case 4: dict with generated_text
-        # Case 6: any other format (return str(data) as fallback)
-        
+        # Case 6: fallback
         answer_text = None
         if isinstance(data, list) and len(data) > 0:
             item = data[0]
@@ -102,7 +93,6 @@ def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
                 answer_text = data["generated_text"]
                 
         if answer_text is None:
-            # Fallback if no matching standard key was found but no error was present
             answer_text = str(data)
             
         return {
@@ -113,7 +103,6 @@ def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
         }
         
     except Exception as e:
-        # Print all errors to console for debugging
         print(f"Error running model '{model_id}': {e}")
         return {
             "response": None,
