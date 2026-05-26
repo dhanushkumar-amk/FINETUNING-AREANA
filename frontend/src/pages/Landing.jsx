@@ -1,7 +1,90 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sparkles, Zap, BarChart2, FileText, Database, Heart, ArrowRight } from 'lucide-react';
 
 export default function Landing() {
+  const [particles, setParticles] = useState([]);
+  const [mousePos, setMousePos] = useState({ x: -100, y: -100 });
+  const [cursorHovered, setCursorHovered] = useState(false);
+  const [heroVisible, setHeroVisible] = useState(false);
+
+  useEffect(() => {
+    // Generate 25 floating particles with randomized attributes
+    const generatedParticles = Array.from({ length: 25 }).map((_, i) => {
+      const size = Math.random() * 3 + 2; // 2px to 5px
+      const speed = Math.random() * 7 + 8; // 8s to 15s
+      const delay = Math.random() * 5; // 0s to 5s
+      const left = Math.random() * 100; // 0% to 100%
+
+      return {
+        id: i,
+        style: {
+          position: 'absolute',
+          bottom: '-20px',
+          left: `${left}%`,
+          width: `${size}px`,
+          height: `${size}px`,
+          backgroundColor: '#D1D5DB', // subtle gray
+          borderRadius: '50%',
+          animationName: 'floatUp',
+          animationDuration: `${speed}s`,
+          animationTimingFunction: 'linear',
+          animationDelay: `${delay}s`,
+          animationIterationCount: 'infinite',
+          animationFillMode: 'backwards',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }
+      };
+    });
+    setParticles(generatedParticles);
+
+    // Track mouse position for custom cursor
+    const handleMouseMove = (e) => {
+      setMousePos({ x: e.clientX, y: e.clientY });
+    };
+
+    // Track hover status over interactive elements
+    const handleMouseOver = (e) => {
+      if (e.target.closest('a, button, [role="button"]')) {
+        setCursorHovered(true);
+      } else {
+        setCursorHovered(false);
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseover', handleMouseOver);
+
+    // Scroll reveal observer
+    const observerOptions = {
+      root: null,
+      rootMargin: '0px 0px -100px 0px', // trigger 100px before appearing
+      threshold: 0.05,
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('revealed');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, observerOptions);
+
+    const elements = document.querySelectorAll('.reveal-on-scroll');
+    elements.forEach((el) => observer.observe(el));
+
+    // Fade in hero content shortly after mount
+    const timer = setTimeout(() => setHeroVisible(true), 100);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseover', handleMouseOver);
+      elements.forEach((el) => observer.unobserve(el));
+      clearTimeout(timer);
+    };
+  }, []);
+
   const steps = [
     {
       id: 1,
@@ -59,41 +142,102 @@ export default function Landing() {
   ];
 
   return (
-    <div className="bg-white text-[#0A0A0A]">
+    <div className="bg-white text-[#0A0A0A] relative">
+      {/* CUSTOM CURSOR TRAILING RING */}
+      <div 
+        className={`hidden md:block fixed pointer-events-none z-[9999] rounded-full border border-black/35 -translate-x-1/2 -translate-y-1/2 transition-all duration-150 ease-out ${
+          cursorHovered ? 'w-12 h-12 border-black bg-black/5' : 'w-7 h-7'
+        }`}
+        style={{
+          left: `${mousePos.x}px`,
+          top: `${mousePos.y}px`,
+        }}
+      />
+      <div 
+        className="hidden md:block fixed pointer-events-none z-[9999] rounded-full bg-black w-1.5 h-1.5 -translate-x-1/2 -translate-y-1/2 transition-all duration-75 ease-out"
+        style={{
+          left: `${mousePos.x}px`,
+          top: `${mousePos.y}px`,
+        }}
+      />
+
       {/* SECTION 1 - HERO */}
-      <section className="py-20 md:py-28 text-center max-w-3xl mx-auto flex flex-col items-center">
-        {/* Small badge top */}
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 border border-gray-200 rounded-full text-xs text-gray-500 font-medium mb-8 select-none">
-          <span>Open Source</span>
-          <span className="text-gray-300">·</span>
-          <span>Free</span>
-          <span className="text-gray-300">·</span>
-          <span>No GPU needed</span>
+      <section className="relative overflow-hidden w-full py-20 md:py-28 text-center flex flex-col items-center border-b border-gray-100">
+        {/* Local CSS Animations */}
+        <style>{`
+          @keyframes floatUp {
+            0% {
+              transform: translateY(0) scale(0.8);
+              opacity: 0;
+            }
+            15% {
+              opacity: 0.4;
+            }
+            85% {
+              opacity: 0.4;
+            }
+            100% {
+              transform: translateY(-550px) scale(1.2);
+              opacity: 0;
+            }
+          }
+
+          .reveal-on-scroll {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+          }
+
+          .reveal-on-scroll.revealed {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        `}</style>
+
+        {/* Floating Particles Container */}
+        <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+          {particles.map((p) => (
+            <div key={p.id} style={p.style} />
+          ))}
         </div>
 
-        {/* H1 large bold */}
-        <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-[#0A0A0A] leading-tight md:leading-none mb-6">
-          Stop guessing.<br />Start knowing.
-        </h1>
+        {/* Hero Content Wrapper */}
+        <div className={`relative z-10 max-w-3xl mx-auto px-6 flex flex-col items-center transition-all duration-1000 ease-out ${
+          heroVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
+        }`}>
+          {/* Small badge top */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 border border-gray-200 rounded-full text-xs text-gray-500 font-medium mb-8 select-none">
+            <span>Open Source</span>
+            <span className="text-gray-300">·</span>
+            <span>Free</span>
+            <span className="text-gray-300">·</span>
+            <span>No GPU needed</span>
+          </div>
 
-        {/* Subtitle gray text */}
-        <p className="text-lg md:text-xl text-gray-500 leading-relaxed mb-10 max-w-xl">
-          Compare finetuned models head to head in 5 minutes. Know exactly which one to ship.
-        </p>
+          {/* H1 large bold */}
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-[#0A0A0A] leading-tight md:leading-none mb-6">
+            Stop guessing.<br />Start knowing.
+          </h1>
 
-        {/* Two buttons side by side */}
-        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-          <button className="h-11 px-8 bg-[#0A0A0A] text-white text-xs font-semibold rounded-md hover:bg-black/90 transition-colors uppercase tracking-wide">
-            Start Battle
-          </button>
-          <button className="h-11 px-8 bg-white text-[#0A0A0A] border border-[#0A0A0A] text-xs font-semibold rounded-md hover:bg-gray-50 transition-colors uppercase tracking-wide">
-            View on GitHub
-          </button>
+          {/* Subtitle gray text */}
+          <p className="text-lg md:text-xl text-gray-500 leading-relaxed mb-10 max-w-xl">
+            Compare finetuned models head to head in 5 minutes. Know exactly which one to ship.
+          </p>
+
+          {/* Two buttons side by side */}
+          <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+            <button className="h-11 px-8 bg-[#0A0A0A] text-white text-xs font-semibold rounded-md hover:bg-black/90 transition-colors uppercase tracking-wide">
+              Start Battle
+            </button>
+            <button className="h-11 px-8 bg-white text-[#0A0A0A] border border-[#0A0A0A] text-xs font-semibold rounded-md hover:bg-gray-50 transition-colors uppercase tracking-wide">
+              View on GitHub
+            </button>
+          </div>
         </div>
       </section>
 
       {/* SECTION 2 - STATS BAR */}
-      <section className="py-8 max-w-5xl mx-auto px-6">
+      <section className="reveal-on-scroll py-8 max-w-5xl mx-auto px-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 p-8 border border-gray-200 rounded-xl bg-gray-50 divide-y-0 divide-x-0 md:divide-x md:divide-gray-200">
           <div className="text-center flex flex-col items-center justify-center p-2">
             <span className="text-2xl md:text-3xl font-bold text-black">$0</span>
@@ -116,13 +260,17 @@ export default function Landing() {
 
       {/* SECTION 3 - HOW IT WORKS */}
       <section className="py-24 max-w-6xl mx-auto px-6">
-        <div className="text-center mb-16">
+        <div className="reveal-on-scroll text-center mb-16">
           <h2 className="text-3xl font-bold tracking-tight text-[#0A0A0A]">How it works</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 relative">
           {steps.map((step, idx) => (
-            <div key={step.id} className="relative flex flex-col items-center text-center p-4">
+            <div 
+              key={step.id} 
+              className="reveal-on-scroll relative flex flex-col items-center text-center p-4"
+              style={{ transitionDelay: `${idx * 150}ms` }}
+            >
               {/* Number badge */}
               <div className="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-sm font-semibold text-black bg-white mb-6">
                 {step.id}
@@ -143,7 +291,7 @@ export default function Landing() {
 
       {/* SECTION 4 - FEATURES GRID */}
       <section className="py-24 max-w-6xl mx-auto px-6 border-t border-gray-100">
-        <div className="text-center mb-16">
+        <div className="reveal-on-scroll text-center mb-16">
           <h2 className="text-3xl font-bold tracking-tight text-[#0A0A0A]">Everything you need</h2>
         </div>
 
@@ -151,7 +299,8 @@ export default function Landing() {
           {features.map((feature, index) => (
             <div 
               key={index}
-              className="p-8 border border-gray-200 rounded-[12px] bg-white hover:border-black transition-colors duration-200"
+              className="reveal-on-scroll p-8 border border-gray-200 rounded-[12px] bg-white hover:border-black transition-colors duration-200"
+              style={{ transitionDelay: `${(index % 3) * 150}ms` }}
             >
               <div className="w-10 h-10 flex items-center justify-center border border-gray-200 rounded-lg bg-gray-50 mb-6">
                 {feature.icon}
@@ -164,7 +313,7 @@ export default function Landing() {
       </section>
 
       {/* SECTION 5 - FOOTER */}
-      <footer className="py-12 mt-20 border-t border-gray-200">
+      <footer className="reveal-on-scroll py-12 mt-20 border-t border-gray-200">
         <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-6">
           {/* Logo and License */}
           <div className="flex flex-col items-center md:items-start gap-1">
