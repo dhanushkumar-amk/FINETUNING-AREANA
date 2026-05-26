@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { Sparkles, Upload, PenLine, Shield, Check, Plus, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Sparkles, Upload, PenLine, Check, Plus, ArrowLeft, ArrowRight, X, Settings, Trash2 } from 'lucide-react';
 
 export default function DatasetChoice({ onNext, onBack, domain }) {
   // Config state variables
-  const [selectedOption, setSelectedOption] = useState('auto');
+  const [selectedOption, setSelectedOption] = useState(null);
   
   // Option 1: Auto Gen states
   const [questionCount, setQuestionCount] = useState(20);
   const [difficulty, setDifficulty] = useState('balanced');
   const [questionTypes, setQuestionTypes] = useState(['factual', 'reasoning', 'edge_cases']);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   
   // Option 2: Upload states
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -37,6 +38,12 @@ export default function DatasetChoice({ onNext, onBack, domain }) {
     if (manualQuestions.length < 10) {
       setManualQuestions([...manualQuestions, '']);
     }
+  };
+
+  // Remove a manual question at a specific index
+  const handleRemoveQuestion = (index) => {
+    const updated = manualQuestions.filter((_, idx) => idx !== index);
+    setManualQuestions(updated.length > 0 ? updated : ['']);
   };
 
   // Change manual question text
@@ -104,24 +111,32 @@ export default function DatasetChoice({ onNext, onBack, domain }) {
         {/* CARD 1 — AUTO GENERATE */}
         <div 
           onClick={() => setSelectedOption('auto')}
-          className={`border rounded-[12px] p-6 transition-all duration-200 cursor-pointer ${
+          className={`border rounded-[12px] p-6 transition-all duration-300 ease-in-out cursor-pointer ${
             selectedOption === 'auto' 
               ? 'border-[#0A0A0A] bg-[#F9FAFB]' 
               : 'border-[#E5E7EB] bg-white hover:border-[#6B7280]'
           }`}
         >
           <div className="flex items-start gap-4">
-            <div className={`p-2.5 rounded-lg border transition-colors ${
-              selectedOption === 'auto' ? 'border-[#0A0A0A] bg-white text-[#0A0A0A]' : 'border-[#E5E7EB] bg-[#F9FAFB] text-[#6B7280]'
+            <div className={`p-2.5 rounded-lg border transition-colors duration-300 ${
+              selectedOption === 'auto' ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white' : 'border-[#E5E7EB] bg-[#F9FAFB] text-[#6B7280]'
             }`}>
               <Sparkles className="w-5 h-5" />
             </div>
             <div className="flex-1 text-left min-w-0">
               <div className="flex items-center justify-between">
-                <h3 className="font-bold text-[#0A0A0A] text-base leading-snug">Auto Generate</h3>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#dcfce7] text-[#16a34a] uppercase tracking-wider select-none">
-                  Recommended
-                </span>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-[#0A0A0A] text-base leading-snug tracking-tight">Auto Generate</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-[#dcfce7] text-[#16a34a] uppercase tracking-wider select-none">
+                    Recommended
+                  </span>
+                </div>
+                {/* Radio Button Indicator */}
+                <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${
+                  selectedOption === 'auto' ? 'border-[#0A0A0A] bg-[#0A0A0A]' : 'border-[#E5E7EB] bg-white'
+                }`}>
+                  {selectedOption === 'auto' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                </div>
               </div>
               <p className="text-sm text-[#6B7280] mt-1 leading-relaxed">
                 AI creates domain-specific test questions based on your selected domain{domain ? ` (${domain})` : ''}
@@ -129,16 +144,244 @@ export default function DatasetChoice({ onNext, onBack, domain }) {
             </div>
           </div>
 
-          {/* Sub-options for Auto Gen */}
+          {/* Collapsed view summary settings and Customize trigger */}
           <div 
-            onClick={(e) => e.stopPropagation()} // prevent card selection toggle on pill click
+            onClick={(e) => e.stopPropagation()} // prevent card selection toggle
             className={`transition-all duration-300 ease-in-out overflow-hidden text-left ${
               selectedOption === 'auto' 
-                ? 'max-h-[500px] opacity-100 mt-6 pt-6 border-t border-[#E5E7EB]' 
+                ? 'max-h-[100px] opacity-100 mt-5 pt-5 border-t border-[#E5E7EB]' 
                 : 'max-h-0 opacity-0 mt-0 pt-0 border-t-0 border-transparent'
             }`}
           >
-            <div className="flex flex-col gap-5">
+            <div className="flex items-center justify-between w-full">
+              <div className="text-xs text-[#6B7280] flex items-center gap-1.5 font-medium">
+                <span className="font-bold text-[#0A0A0A]">Configuration:</span>
+                <span>{questionCount} questions</span>
+                <span>&bull;</span>
+                <span className="capitalize">{difficulty}</span>
+                <span>&bull;</span>
+                <span>{questionTypes.length} Types</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(true)}
+                className="h-8 px-3 border border-[#E5E7EB] text-[#0A0A0A] hover:border-[#0A0A0A] text-xs font-semibold rounded-lg bg-white transition-all flex items-center gap-1.5 hover:bg-[#F9FAFB]"
+              >
+                <Settings className="w-3.5 h-3.5 text-[#6B7280]" />
+                Customize Settings
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* CARD 2 — UPLOAD DATASET */}
+        <div 
+          onClick={() => setSelectedOption('upload')}
+          className={`border rounded-[12px] p-6 transition-all duration-300 ease-in-out cursor-pointer ${
+            selectedOption === 'upload' 
+              ? 'border-[#0A0A0A] bg-[#F9FAFB]' 
+              : 'border-[#E5E7EB] bg-white hover:border-[#6B7280]'
+          }`}
+        >
+          <div className="flex items-start gap-4">
+            <div className={`p-2.5 rounded-lg border transition-colors duration-300 ${
+              selectedOption === 'upload' ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white' : 'border-[#E5E7EB] bg-[#F9FAFB] text-[#6B7280]'
+            }`}>
+              <Upload className="w-5 h-5" />
+            </div>
+            <div className="flex-1 text-left min-w-0">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-[#0A0A0A] text-base leading-snug tracking-tight">Upload My Dataset</h3>
+                {/* Radio Button Indicator */}
+                <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${
+                  selectedOption === 'upload' ? 'border-[#0A0A0A] bg-[#0A0A0A]' : 'border-[#E5E7EB] bg-white'
+                }`}>
+                  {selectedOption === 'upload' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                </div>
+              </div>
+              <p className="text-sm text-[#6B7280] mt-1 leading-relaxed">
+                Use your own test questions from a CSV file
+              </p>
+            </div>
+          </div>
+
+          {/* Upload Area for Option 2 */}
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className={`transition-all duration-300 ease-in-out overflow-hidden text-center ${
+              selectedOption === 'upload' 
+                ? 'max-h-[300px] opacity-100 mt-6 pt-6 border-t border-[#E5E7EB]' 
+                : 'max-h-0 opacity-0 mt-0 pt-0 border-t-0 border-transparent'
+            }`}
+          >
+            <div className="w-full bg-white rounded-[12px] p-8 border border-dashed border-[#E5E7EB] hover:border-[#0A0A0A] transition-colors relative">
+              {uploadedFile ? (
+                <div className="flex flex-col items-center gap-3 animate-in zoom-in-95 duration-200">
+                  <div className="w-10 h-10 rounded-full bg-[#dcfce7] flex items-center justify-center border border-[#bbf7d0]">
+                    <Check className="w-5 h-5 text-[#16a34a]" />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-[#0A0A0A] font-semibold">{uploadedFile.name}</p>
+                    <p className="text-xs text-[#6B7280] mt-0.5">{(uploadedFile.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUploadedFile(null)}
+                    className="h-8 px-3.5 border border-[#E5E7EB] text-red-600 hover:text-red-700 hover:border-red-200 text-xs font-semibold rounded-lg bg-white transition-all flex items-center gap-1.5 mt-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                    Remove File
+                  </button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center cursor-pointer w-full h-full">
+                  <input 
+                    type="file" 
+                    accept=".csv"
+                    onChange={handleFileChange}
+                    className="hidden" 
+                  />
+                  <div className="w-10 h-10 rounded-full bg-[#F9FAFB] border border-[#E5E7EB] flex items-center justify-center mb-3">
+                    <Upload className="w-4 h-4 text-[#6B7280]" />
+                  </div>
+                  <span className="text-sm font-semibold text-[#0A0A0A]">Drop your CSV file here</span>
+                  <span className="text-xs text-[#6B7280] mt-1">or click to browse</span>
+                  <span className="text-[10px] text-[#6B7280] mt-4 bg-[#F9FAFB] px-2.5 py-1 rounded-md border border-[#E5E7EB]">
+                    Required column: <code className="font-mono text-[#0A0A0A] font-semibold">question</code> | Max 50 rows | Max 1MB
+                  </span>
+                </label>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* CARD 3 — WRITE MY OWN */}
+        <div 
+          onClick={() => setSelectedOption('manual')}
+          className={`border rounded-[12px] p-6 transition-all duration-300 ease-in-out cursor-pointer ${
+            selectedOption === 'manual' 
+              ? 'border-[#0A0A0A] bg-[#F9FAFB]' 
+              : 'border-[#E5E7EB] bg-white hover:border-[#6B7280]'
+          }`}
+        >
+          <div className="flex items-start gap-4">
+            <div className={`p-2.5 rounded-lg border transition-colors duration-300 ${
+              selectedOption === 'manual' ? 'border-[#0A0A0A] bg-[#0A0A0A] text-white' : 'border-[#E5E7EB] bg-[#F9FAFB] text-[#6B7280]'
+            }`}>
+              <PenLine className="w-5 h-5" />
+            </div>
+            <div className="flex-1 text-left min-w-0">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-[#0A0A0A] text-base leading-snug tracking-tight">Write My Own</h3>
+                {/* Radio Button Indicator */}
+                <div className={`w-4 h-4 rounded-full border flex items-center justify-center transition-all ${
+                  selectedOption === 'manual' ? 'border-[#0A0A0A] bg-[#0A0A0A]' : 'border-[#E5E7EB] bg-white'
+                }`}>
+                  {selectedOption === 'manual' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                </div>
+              </div>
+              <p className="text-sm text-[#6B7280] mt-1 leading-relaxed">
+                Type your own test questions manually
+              </p>
+            </div>
+          </div>
+
+          {/* Manual input area for Option 3 */}
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className={`transition-all duration-300 ease-in-out overflow-hidden text-left ${
+              selectedOption === 'manual' 
+                ? 'max-h-[600px] opacity-100 mt-6 pt-6 border-t border-[#E5E7EB]' 
+                : 'max-h-0 opacity-0 mt-0 pt-0 border-t-0 border-transparent'
+            }`}
+          >
+            <div className="flex flex-col gap-3">
+              {manualQuestions.map((question, index) => (
+                <div key={index} className="relative flex items-center w-full bg-white rounded-lg">
+                  <span className="absolute left-3.5 text-xs text-[#6B7280] font-mono select-none">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <input
+                    type="text"
+                    placeholder="Type a test question..."
+                    value={question}
+                    onChange={(e) => handleQuestionChange(index, e.target.value)}
+                    className="w-full h-11 border border-[#E5E7EB] rounded-lg pl-10 pr-10 text-sm text-[#0A0A0A] focus:border-[#0A0A0A] focus:ring-1 focus:ring-[#0A0A0A] focus:outline-none transition-all bg-white"
+                  />
+                  {manualQuestions.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveQuestion(index)}
+                      className="absolute right-3 p-1 text-gray-400 hover:text-red-500 rounded-md transition-colors"
+                      title="Remove question"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              
+              <div className="flex items-center justify-between mt-2 pt-3 border-t border-[#E5E7EB]">
+                <button
+                  onClick={handleAddQuestion}
+                  disabled={manualQuestions.length >= 10}
+                  className="h-8 px-3 border border-[#E5E7EB] text-[#6B7280] hover:text-[#0A0A0A] hover:border-[#6B7280] text-xs font-semibold rounded-lg bg-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Question
+                </button>
+                <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wide">
+                  {validManualCount} of {manualQuestions.length} filled (min 3)
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 4. NAVIGATION BUTTONS */}
+      <div className="flex items-center justify-between border-t border-[#E5E7EB] pt-6 mt-10">
+        <button
+          onClick={onBack}
+          className="h-10 px-5 border border-[#0A0A0A] text-[#0A0A0A] text-xs font-semibold rounded-md hover:bg-[#F9FAFB] transition-colors uppercase tracking-wider flex items-center gap-1.5"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+        <button
+          disabled={!isValid()}
+          onClick={handleStartBattle}
+          className={`h-10 px-6 text-xs font-semibold rounded-md uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 ${
+            isValid()
+              ? 'bg-[#0A0A0A] text-white hover:bg-black/90 cursor-pointer'
+              : 'bg-[#F9FAFB] text-gray-400 border border-[#E5E7EB] cursor-not-allowed'
+          }`}
+        >
+          Start Battle <ArrowRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* 5. CUSTOMIZATION SETTINGS MODAL */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white border border-[#E5E7EB] rounded-[16px] p-6 max-w-md w-full shadow-xl relative text-left animate-in zoom-in-95 duration-200">
+            {/* Close button */}
+            <button
+              onClick={() => setShowSettingsModal(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-400 hover:text-black hover:bg-gray-100 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Header */}
+            <div className="mb-6 pr-6">
+              <h3 className="text-lg font-bold text-[#0A0A0A] tracking-tight">Configure Generator</h3>
+              <p className="text-xs text-[#6B7280] mt-1 leading-relaxed">
+                Adjust how the AI generates test questions for your evaluation goals.
+              </p>
+            </div>
+
+            {/* Settings Fields */}
+            <div className="flex flex-col gap-6 mb-6">
               {/* Row 1: Number of questions */}
               <div>
                 <span className="block text-[10px] font-bold text-[#6B7280] uppercase tracking-widest mb-2.5">
@@ -149,7 +392,7 @@ export default function DatasetChoice({ onNext, onBack, domain }) {
                     <button
                       key={count}
                       onClick={() => setQuestionCount(count)}
-                      className={`px-4 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+                      className={`px-4 py-1.5 text-xs font-semibold rounded-full border transition-all ${
                         questionCount === count
                           ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
                           : 'bg-white border-[#E5E7EB] text-[#6B7280] hover:text-[#0A0A0A] hover:border-[#6B7280]'
@@ -171,7 +414,7 @@ export default function DatasetChoice({ onNext, onBack, domain }) {
                     <button
                       key={diff}
                       onClick={() => setDifficulty(diff)}
-                      className={`px-4 py-1.5 text-xs font-semibold rounded-lg border transition-all capitalize ${
+                      className={`px-4 py-1.5 text-xs font-semibold rounded-full border transition-all capitalize ${
                         difficulty === diff
                           ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
                           : 'bg-white border-[#E5E7EB] text-[#6B7280] hover:text-[#0A0A0A] hover:border-[#6B7280]'
@@ -199,7 +442,7 @@ export default function DatasetChoice({ onNext, onBack, domain }) {
                       <button
                         key={type.id}
                         onClick={() => handleToggleQuestionType(type.id)}
-                        className={`px-4 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+                        className={`px-4 py-1.5 text-xs font-semibold rounded-full border transition-all ${
                           isSelected
                             ? 'bg-[#0A0A0A] border-[#0A0A0A] text-white'
                             : 'bg-white border-[#E5E7EB] text-[#6B7280] hover:text-[#0A0A0A] hover:border-[#6B7280]'
@@ -212,163 +455,20 @@ export default function DatasetChoice({ onNext, onBack, domain }) {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* CARD 2 — UPLOAD DATASET */}
-        <div 
-          onClick={() => setSelectedOption('upload')}
-          className={`border rounded-[12px] p-6 transition-all duration-200 cursor-pointer ${
-            selectedOption === 'upload' 
-              ? 'border-[#0A0A0A] bg-[#F9FAFB]' 
-              : 'border-[#E5E7EB] bg-white hover:border-[#6B7280]'
-          }`}
-        >
-          <div className="flex items-start gap-4">
-            <div className={`p-2.5 rounded-lg border transition-colors ${
-              selectedOption === 'upload' ? 'border-[#0A0A0A] bg-white text-[#0A0A0A]' : 'border-[#E5E7EB] bg-[#F9FAFB] text-[#6B7280]'
-            }`}>
-              <Upload className="w-5 h-5" />
-            </div>
-            <div className="flex-1 text-left min-w-0">
-              <h3 className="font-bold text-[#0A0A0A] text-base leading-snug">Upload My Dataset</h3>
-              <p className="text-sm text-[#6B7280] mt-1 leading-relaxed">
-                Use your own test questions from a CSV file
-              </p>
-            </div>
-          </div>
-
-          {/* Upload Area for Option 2 */}
-          <div 
-            onClick={(e) => e.stopPropagation()} 
-            className={`transition-all duration-300 ease-in-out overflow-hidden text-center ${
-              selectedOption === 'upload' 
-                ? 'max-h-[300px] opacity-100 mt-6 pt-6 border-t border-[#E5E7EB]' 
-                : 'max-h-0 opacity-0 mt-0 pt-0 border-t-0 border-transparent'
-            }`}
-          >
-            <label className="border border-dashed border-[#E5E7EB] hover:border-[#0A0A0A] rounded-[12px] p-8 flex flex-col items-center justify-center cursor-pointer transition-colors w-full bg-white">
-              <input 
-                type="file" 
-                accept=".csv"
-                onChange={handleFileChange}
-                className="hidden" 
-              />
-              {uploadedFile ? (
-                <div className="flex items-center gap-2 text-sm text-[#16a34a] font-semibold animate-in zoom-in-95 duration-200">
-                  <Check className="w-4 h-4 text-[#16a34a]" />
-                  <span>{uploadedFile.name}</span>
-                </div>
-              ) : (
-                <>
-                  <Upload className="w-6 h-6 text-[#6B7280]/40 mb-3" />
-                  <span className="text-sm font-semibold text-[#0A0A0A]">Drop your CSV file here</span>
-                  <span className="text-xs text-[#6B7280] mt-1">or click to browse</span>
-                  <span className="text-[10px] text-[#6B7280] mt-4 bg-[#F9FAFB] px-2.5 py-1 rounded-md border border-[#E5E7EB]">
-                    Required column: <code className="font-mono text-[#0A0A0A] font-semibold">question</code> | Max 50 rows | Max 1MB
-                  </span>
-                </>
-              )}
-            </label>
-          </div>
-        </div>
-
-        {/* CARD 3 — WRITE MY OWN */}
-        <div 
-          onClick={() => setSelectedOption('manual')}
-          className={`border rounded-[12px] p-6 transition-all duration-200 cursor-pointer ${
-            selectedOption === 'manual' 
-              ? 'border-[#0A0A0A] bg-[#F9FAFB]' 
-              : 'border-[#E5E7EB] bg-white hover:border-[#6B7280]'
-          }`}
-        >
-          <div className="flex items-start gap-4">
-            <div className={`p-2.5 rounded-lg border transition-colors ${
-              selectedOption === 'manual' ? 'border-[#0A0A0A] bg-white text-[#0A0A0A]' : 'border-[#E5E7EB] bg-[#F9FAFB] text-[#6B7280]'
-            }`}>
-              <PenLine className="w-5 h-5" />
-            </div>
-            <div className="flex-1 text-left min-w-0">
-              <h3 className="font-bold text-[#0A0A0A] text-base leading-snug">Write My Own</h3>
-              <p className="text-sm text-[#6B7280] mt-1 leading-relaxed">
-                Type your own test questions manually
-              </p>
-            </div>
-          </div>
-
-          {/* Manual input area for Option 3 */}
-          <div 
-            onClick={(e) => e.stopPropagation()} 
-            className={`transition-all duration-300 ease-in-out overflow-hidden text-left ${
-              selectedOption === 'manual' 
-                ? 'max-h-[600px] opacity-100 mt-6 pt-6 border-t border-[#E5E7EB]' 
-                : 'max-h-0 opacity-0 mt-0 pt-0 border-t-0 border-transparent'
-            }`}
-          >
-            <div className="flex flex-col gap-3">
-              {manualQuestions.map((question, index) => (
-                <div key={index} className="flex flex-col w-full">
-                  <input
-                    type="text"
-                    placeholder={`Question ${index + 1}...`}
-                    value={question}
-                    onChange={(e) => handleQuestionChange(index, e.target.value)}
-                    className="w-full h-10 border border-[#E5E7EB] rounded-lg px-3 text-sm text-[#0A0A0A] focus:border-[#0A0A0A] focus:ring-1 focus:ring-[#0A0A0A] focus:outline-none transition-all"
-                  />
-                </div>
-              ))}
-              
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#E5E7EB]">
-                <button
-                  onClick={handleAddQuestion}
-                  disabled={manualQuestions.length >= 10}
-                  className="h-8 px-4 border border-[#E5E7EB] text-[#6B7280] hover:text-[#0A0A0A] hover:border-[#6B7280] text-xs font-semibold rounded-lg bg-white transition-colors flex items-center gap-1.5 disabled:opacity-50"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add Question
-                </button>
-                <span className="text-[10px] font-bold text-[#6B7280] uppercase tracking-wide">
-                  {validManualCount} questions added (min 3)
-                </span>
-              </div>
+            {/* Action Footer */}
+            <div className="pt-4 border-t border-[#E5E7EB] flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(false)}
+                className="h-10 px-5 bg-[#0A0A0A] hover:bg-black/90 text-white text-xs font-semibold rounded-lg transition-all uppercase tracking-wider w-full"
+              >
+                Apply Configuration
+              </button>
             </div>
           </div>
         </div>
-
-      </div>
-
-      {/* 3. PRIVACY NOTICE */}
-      <div className="border border-[#E5E7EB] rounded-lg bg-[#F9FAFB] p-4 mb-10 flex gap-3 text-left">
-        <Shield className="w-5 h-5 text-[#6B7280] flex-shrink-0 mt-0.5" />
-        <div>
-          <p className="text-xs text-[#6B7280] leading-relaxed font-medium">
-            Your questions are sent to Groq and HuggingFace APIs for processing. Do not upload confidential data.
-          </p>
-          <a href="#self-host" className="inline-block text-[11px] font-semibold text-[#0A0A0A] hover:underline mt-2">
-            Use self-hosted version &rarr;
-          </a>
-        </div>
-      </div>
-
-      {/* 4. NAVIGATION BUTTONS */}
-      <div className="flex items-center justify-between border-t border-[#E5E7EB] pt-6">
-        <button
-          onClick={onBack}
-          className="h-10 px-5 border border-[#0A0A0A] text-[#0A0A0A] text-xs font-semibold rounded-md hover:bg-[#F9FAFB] transition-colors uppercase tracking-wider flex items-center gap-1.5"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back
-        </button>
-        <button
-          disabled={!isValid()}
-          onClick={handleStartBattle}
-          className={`h-10 px-6 text-xs font-semibold rounded-md uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 ${
-            isValid()
-              ? 'bg-[#0A0A0A] text-white hover:bg-black/90 cursor-pointer'
-              : 'bg-[#F9FAFB] text-gray-400 border border-[#E5E7EB] cursor-not-allowed'
-          }`}
-        >
-          Start Battle <ArrowRight className="w-4 h-4" />
-        </button>
-      </div>
+      )}
     </div>
   );
 }
