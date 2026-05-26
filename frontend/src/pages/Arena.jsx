@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Check, ArrowLeft, ArrowRight } from 'lucide-react';
 import ModelSelection from '../components/ModelSelection';
+import DatasetChoice from '../components/DatasetChoice';
 
 const STEPS = [
   { id: 1, label: "Select Models" },
@@ -15,6 +16,7 @@ export default function Arena() {
   // State for Wizard Form
   const [modelA, setModelA] = useState(null);
   const [modelB, setModelB] = useState(null);
+  const [datasetConfig, setDatasetConfig] = useState(null);
 
   const handleNext = () => {
     if (currentStep < 4) setCurrentStep(currentStep + 1);
@@ -79,9 +81,15 @@ export default function Arena() {
           </div>
         )}
         {currentStep === 2 && (
-          <div className="w-full text-center animate-in fade-in duration-300">
-            <h2 className="text-xl font-semibold text-black mb-2">Dataset Choice</h2>
-            <p className="text-sm text-gray-500">Dataset Choice coming soon</p>
+          <div className="w-full animate-in fade-in duration-300">
+            <DatasetChoice
+              onNext={(config) => {
+                setDatasetConfig(config);
+                handleNext();
+              }}
+              onBack={handleBack}
+              domain={modelA?.pipeline || 'Text Generation'}
+            />
           </div>
         )}
         {currentStep === 3 && (
@@ -99,28 +107,30 @@ export default function Arena() {
       </div>
 
       {/* NAVIGATION BUTTONS */}
-      <div className="flex items-center justify-between">
-        <div>
-          {currentStep > 1 && (
-            <button 
-              onClick={handleBack}
-              className="h-10 px-5 border border-black text-black text-xs font-semibold rounded-md hover:bg-gray-50 transition-colors uppercase tracking-wider flex items-center gap-2"
-            >
-              <ArrowLeft className="w-4 h-4" /> Back
-            </button>
-          )}
+      {currentStep !== 1 && currentStep !== 2 && (
+        <div className="flex items-center justify-between">
+          <div>
+            {currentStep > 1 && (
+              <button 
+                onClick={handleBack}
+                className="h-10 px-5 border border-black text-black text-xs font-semibold rounded-md hover:bg-gray-50 transition-colors uppercase tracking-wider flex items-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" /> Back
+              </button>
+            )}
+          </div>
+          <div>
+            {currentStep > 1 && currentStep < 4 && (
+              <button 
+                onClick={handleNext}
+                className="h-10 px-5 bg-black text-white text-xs font-semibold rounded-md hover:bg-black/90 transition-colors uppercase tracking-wider flex items-center gap-2"
+              >
+                Next <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
-        <div>
-          {currentStep > 1 && currentStep < 4 && (
-            <button 
-              onClick={handleNext}
-              className="h-10 px-5 bg-black text-white text-xs font-semibold rounded-md hover:bg-black/90 transition-colors uppercase tracking-wider flex items-center gap-2"
-            >
-              Next <ArrowRight className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
