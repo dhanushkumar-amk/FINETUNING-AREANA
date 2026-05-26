@@ -15,7 +15,6 @@ export default function Arena() {
   // State for Wizard Form
   const [modelA, setModelA] = useState(null);
   const [modelB, setModelB] = useState(null);
-  const [domain, setDomain] = useState(null);
 
   const handleNext = () => {
     if (currentStep < 4) setCurrentStep(currentStep + 1);
@@ -75,8 +74,6 @@ export default function Arena() {
               setModelA={setModelA}
               modelB={modelB}
               setModelB={setModelB}
-              domain={domain}
-              setDomain={setDomain}
               onSuccess={handleNext}
             />
           </div>
