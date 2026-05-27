@@ -1,8 +1,12 @@
 import os
 import socket
 import requests
+import urllib3
 from groq import Groq
 from dotenv import load_dotenv
+
+# Disable SSL verification warnings for direct-IP HTTPS DNS requests
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Load environment variables
 load_dotenv()
@@ -11,15 +15,19 @@ load_dotenv()
 original_getaddrinfo = socket.getaddrinfo
 
 def custom_resolve(host):
+    """
+    Bypasses broken system DNS resolvers by querying Google's 
+    Public DNS HTTPS API directly using the raw IP 8.8.8.8.
+    """
     if host == "api-inference.huggingface.co":
         try:
-            url = "http://8.8.8.8/resolve?name=api-inference.huggingface.co&type=A"
-            r = requests.get(url, timeout=5)
+            url = "https://8.8.8.8/resolve?name=api-inference.huggingface.co&type=A"
+            r = requests.get(url, headers={"Host": "dns.google"}, verify=False, timeout=5)
             data = r.json()
             ips = []
             if "Answer" in data:
                 for ans in data["Answer"]:
-                    if ans.get("type") == 1:
+                    if ans.get("type") == 1:  # A record type
                         ips.append(ans["data"])
             if ips:
                 return ips[0]

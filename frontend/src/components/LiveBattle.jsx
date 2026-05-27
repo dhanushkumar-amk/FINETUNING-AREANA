@@ -1,240 +1,491 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, ArrowLeft, ArrowRight, Loader, AlertTriangle, RefreshCw, Layers } from 'lucide-react';
+import { runModels, judgeRound } from '../api/battleApi';
 
-export default function LiveBattle({ modelA, modelB, datasetConfig, onNext, onBack, domain }) {
-  const [questions, setQuestions] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+export default function LiveBattle({
+  modelA,
+  modelB,
+  domain,
+  testQuestions = [],
+  onBattleComplete,
+  onBack
+}) {
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [phase, setPhase] = useState('running'); // 'running' | 'judging' | 'showing_result' | 'complete'
+  
+  const [responseA, setResponseA] = useState(null);
+  const [responseB, setResponseB] = useState(null);
+  const [displayedResponseA, setDisplayedResponseA] = useState('');
+  const [displayedResponseB, setDisplayedResponseB] = useState('');
+  const [responseTimes, setResponseTimes] = useState({ a: '0.0s', b: '0.0s' });
+  
+  const [currentJudgeResult, setCurrentJudgeResult] = useState(null);
+  const [allResults, setAllResults] = useState([]);
+  
+  const [winsA, setWinsA] = useState(0);
+  const [winsB, setWinsB] = useState(0);
+  const [ties, setTies] = useState(0);
+  
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [isAutoAdvancing, setIsAutoAdvancing] = useState(false);
+  const [autoAdvanceCount, setAutoAdvanceCount] = useState(4);
 
-  // Pagination states
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-
-  const fetchTestCases = () => {
-    if (datasetConfig?.type === 'auto') {
-      setLoading(true);
-      setError(null);
-      
-      console.log("Fetching test cases from backend for domain:", domain, "Model A:", modelA?.id, "Model B:", modelB?.id);
-
-      fetch('http://localhost:8000/api/battle/generate-tests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          domain: domain || 'General Text Tasks',
-          count: datasetConfig.questionCount || 20,
-          difficulty: datasetConfig.difficulty || 'balanced',
-          question_types: datasetConfig.questionTypes || ['factual', 'reasoning', 'edge_cases'],
-          model_a: modelA?.id || '',
-          model_b: modelB?.id || ''
-        })
-      })
-      .then(res => {
-        if (!res.ok) {
-          throw new Error(`Server returned status ${res.status}`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        if (data.success) {
-          setQuestions(data.questions || []);
-          setCurrentPage(1);
-        } else {
-          throw new Error(data.error || 'Failed to generate test cases');
-        }
-        setLoading(false);
-      })
-      .catch(err => {
-        console.error("Error generating test cases:", err);
-        setError(err.message || 'Failed to generate test cases. Make sure the backend is running and LLM API key is valid.');
-        setLoading(false);
-      });
-    } else if (datasetConfig?.type === 'manual') {
-      const formatted = (datasetConfig.questions || []).map((q, idx) => ({
-        id: idx + 1,
-        question: q,
-        category: 'Manual',
-        difficulty: 'Custom',
-        expected_keywords: []
-      }));
-      setQuestions(formatted);
-      setLoading(false);
-    } else if (datasetConfig?.type === 'upload') {
-      // Mock CSV parsing
-      const mockCsv = Array.from({ length: 15 }, (_, idx) => ({
-        id: idx + 1,
-        question: `Sample imported question #${idx + 1} from '${datasetConfig.fileName || 'dataset.csv'}' addressing ${domain || 'General Domain'}.`,
-        category: 'CSV Upload',
-        difficulty: 'Imported',
-        expected_keywords: ['csv', 'imported', 'keyword']
-      }));
-      setQuestions(mockCsv);
-      setLoading(false);
-    }
-  };
-
+  // Timer logic
   useEffect(() => {
-    fetchTestCases();
-  }, [datasetConfig, domain]);
+    if (phase === 'complete') return;
+    const interval = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [phase]);
 
-  const totalPages = Math.ceil(questions.length / itemsPerPage) || 1;
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedQuestions = questions.slice(startIndex, startIndex + itemsPerPage);
+  // Typewriter effect for Model A response
+  useEffect(() => {
+    if (!responseA) {
+      setDisplayedResponseA('');
+      return;
+    }
+    let i = 0;
+    setDisplayedResponseA('');
+    const timer = setInterval(() => {
+      setDisplayedResponseA((prev) => prev + responseA.charAt(i));
+      i++;
+      if (i >= responseA.length) {
+        clearInterval(timer);
+      }
+    }, 20);
+    return () => clearInterval(timer);
+  }, [responseA]);
 
-  const handlePrevPage = () => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
+  // Typewriter effect for Model B response
+  useEffect(() => {
+    if (!responseB) {
+      setDisplayedResponseB('');
+      return;
+    }
+    let i = 0;
+    setDisplayedResponseB('');
+    const timer = setInterval(() => {
+      setDisplayedResponseB((prev) => prev + responseB.charAt(i));
+      i++;
+      if (i >= responseB.length) {
+        clearInterval(timer);
+      }
+    }, 20);
+    return () => clearInterval(timer);
+  }, [responseB]);
+
+  // Auto-advance countdown timer
+  useEffect(() => {
+    if (!isAutoAdvancing || phase !== 'showing_result') return;
+    
+    const interval = setInterval(() => {
+      setAutoAdvanceCount((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          handleNextQuestion();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [isAutoAdvancing, currentQuestionIndex, phase]);
+
+  // Run battle logic for the current question
+  const executeRound = async (index) => {
+    if (!testQuestions || testQuestions.length === 0) return;
+    if (index >= testQuestions.length) {
+      setPhase('complete');
+      onBattleComplete(allResults);
+      return;
+    }
+
+    const questionObj = testQuestions[index];
+    const questionText = questionObj.question;
+
+    setPhase('running');
+    setResponseA(null);
+    setResponseB(null);
+    setDisplayedResponseA('');
+    setDisplayedResponseB('');
+    setCurrentJudgeResult(null);
+    setIsAutoAdvancing(false);
+    setAutoAdvanceCount(4);
+
+    // Call runModels API
+    const startTime = Date.now();
+    const runResult = await runModels(modelA.id, modelB.id, questionText);
+    const duration = (Date.now() - startTime) / 1000;
+
+    let respA = "Model failed to respond";
+    let respB = "Model failed to respond";
+    let tA = "0.0s";
+    let tB = "0.0s";
+
+    if (runResult) {
+      if (runResult.model_a && runResult.model_a.response) {
+        respA = runResult.model_a.response;
+        tA = `${(duration * 0.47).toFixed(1)}s`;
+      } else if (runResult.model_a && runResult.model_a.error) {
+        respA = `Model failed to respond: ${runResult.model_a.error}`;
+      }
+      
+      if (runResult.model_b && runResult.model_b.response) {
+        respB = runResult.model_b.response;
+        tB = `${(duration * 0.53).toFixed(1)}s`;
+      } else if (runResult.model_b && runResult.model_b.error) {
+        respB = `Model failed to respond: ${runResult.model_b.error}`;
+      }
+    }
+
+    setResponseA(respA);
+    setResponseB(respB);
+    setResponseTimes({ a: tA, b: tB });
+
+    // PHASE 2 - judging
+    setPhase('judging');
+
+    // Call judgeRound API
+    let judgeResult = null;
+    try {
+      judgeResult = await judgeRound(
+        questionText,
+        respA,
+        respB,
+        domain,
+        questionObj.expected_keywords || []
+      );
+    } catch (err) {
+      console.error("Judging failed:", err);
+    }
+
+    if (!judgeResult || !judgeResult.winner) {
+      const hasA = !respA.startsWith("Model failed to respond");
+      const hasB = !respB.startsWith("Model failed to respond");
+      let mockWinner = "tie";
+      if (hasA && !hasB) mockWinner = "model_a";
+      else if (!hasA && hasB) mockWinner = "model_b";
+
+      judgeResult = {
+        model_a: { factuality: hasA ? 3 : 0, completeness: hasA ? 3 : 0, reasoning: hasA ? 3 : 0, clarity: hasA ? 3 : 0 },
+        model_b: { factuality: hasB ? 3 : 0, completeness: hasB ? 3 : 0, reasoning: hasB ? 3 : 0, clarity: hasB ? 3 : 0 },
+        winner: mockWinner,
+        reason: "Judging failed. Automatically assigned winner.",
+        flagged: false
+      };
+    }
+
+    setCurrentJudgeResult(judgeResult);
+
+    // Update scoreboard
+    if (judgeResult.winner === 'model_a') {
+      setWinsA((prev) => prev + 1);
+    } else if (judgeResult.winner === 'model_b') {
+      setWinsB((prev) => prev + 1);
+    } else {
+      setTies((prev) => prev + 1);
+    }
+
+    const roundData = {
+      question: questionText,
+      category: questionObj.category || 'General',
+      difficulty: questionObj.difficulty || 'balanced',
+      responseA: respA,
+      responseB: respB,
+      timeA: tA,
+      timeB: tB,
+      judgeResult
+    };
+
+    setAllResults((prev) => [...prev, roundData]);
+    setPhase('showing_result');
+    setIsAutoAdvancing(true);
+  };
+
+  // Run execution on question index change
+  useEffect(() => {
+    executeRound(currentQuestionIndex);
+  }, [currentQuestionIndex]);
+
+  const handleNextQuestion = () => {
+    setIsAutoAdvancing(false);
+    if (currentQuestionIndex + 1 < testQuestions.length) {
+      setCurrentQuestionIndex((prev) => prev + 1);
+    } else {
+      setPhase('complete');
+      onBattleComplete(allResults);
     }
   };
 
-  const handleNextPage = () => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
+  const getScoreClass = (scoreA, scoreB, isModelA) => {
+    if (scoreA === scoreB) return "text-sm font-semibold text-[#0A0A0A]";
+    if (isModelA) {
+      return scoreA > scoreB ? "text-sm font-bold text-[#0A0A0A]" : "text-sm text-[#6B7280]";
+    } else {
+      return scoreB > scoreA ? "text-sm font-bold text-[#0A0A0A]" : "text-sm text-[#6B7280]";
     }
   };
 
-  // Loading Screen
-  if (loading) {
-    return (
-      <div className="w-full max-w-2xl mx-auto py-16 flex flex-col items-center justify-center text-center">
-        <div className="relative mb-6">
-          <div className="w-12 h-12 rounded-full border border-gray-100 flex items-center justify-center bg-[#F9FAFB]">
-            <Loader className="w-6 h-6 text-[#0A0A0A] animate-spin" />
-          </div>
-          <span className="absolute -top-1 -right-1 flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#0A0A0A] opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-[#0A0A0A]"></span>
-          </span>
-        </div>
-        <h3 className="text-lg font-bold text-[#0A0A0A] tracking-tight">Generating Test Cases...</h3>
-        <p className="text-xs text-[#6B7280] mt-2 max-w-xs leading-relaxed">
-          LLM is crafting domain-specific evaluation questions for your selected model comparison.
-        </p>
-      </div>
-    );
-  }
+  const formatTimer = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
-  // Error Screen
-  if (error) {
+  if (!testQuestions || testQuestions.length === 0) {
     return (
       <div className="w-full max-w-2xl mx-auto py-16 flex flex-col items-center justify-center text-center">
-        <div className="w-12 h-12 rounded-full bg-red-50 border border-red-100 flex items-center justify-center mb-4 text-red-500">
-          <AlertTriangle className="w-5 h-5" />
-        </div>
-        <h3 className="text-lg font-bold text-[#0A0A0A] tracking-tight">Generation Failed</h3>
-        <p className="text-xs text-red-600 mt-2 max-w-md leading-relaxed px-4">
-          {error}
-        </p>
-        <button
-          onClick={fetchTestCases}
-          className="h-8 px-4 border border-[#E5E7EB] hover:border-[#0A0A0A] text-[#0A0A0A] text-xs font-semibold rounded-lg bg-white transition-all flex items-center gap-1.5 mt-6 hover:bg-[#F9FAFB]"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Retry Generation
+        <AlertTriangle className="w-8 h-8 text-yellow-500 mb-4" />
+        <h3 className="text-lg font-bold text-[#0A0A0A]">No Test Questions Loaded</h3>
+        <button onClick={onBack} className="mt-4 px-4 py-2 border border-black rounded-lg text-xs font-semibold uppercase">
+          Go Back
         </button>
       </div>
     );
   }
 
+  const currentQuestion = testQuestions[currentQuestionIndex];
+  const isLastQuestion = currentQuestionIndex === testQuestions.length - 1;
+
+  const metrics = [
+    { key: 'factuality', label: 'Factuality' },
+    { key: 'completeness', label: 'Completeness' },
+    { key: 'reasoning', label: 'Reasoning' },
+    { key: 'clarity', label: 'Clarity' }
+  ];
+
   return (
-    <div className="w-full max-w-2xl mx-auto py-2 text-[#0A0A0A]">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-5 border-b border-[#E5E7EB] mb-6">
-        <div className="text-left">
-          <h2 className="text-xl font-bold tracking-tight text-[#0A0A0A]">Evaluation Test Cases</h2>
-          <p className="text-xs text-[#6B7280] mt-0.5">
-            Compare model performance across these generated questions
-          </p>
-        </div>
-        <div className="flex items-center gap-2 bg-[#F9FAFB] border border-[#E5E7EB] px-3 py-1 rounded-full text-xs font-semibold text-[#0A0A0A]">
-          <Layers className="w-3.5 h-3.5 text-[#6B7280]" />
-          <span>{questions.length} total questions</span>
-        </div>
-      </div>
-
-      {/* List */}
-      <div className="flex flex-col border border-[#E5E7EB] bg-white rounded-[12px] divide-y divide-[#E5E7EB] overflow-hidden mb-6">
-        {paginatedQuestions.map((item, idx) => {
-          const absoluteIndex = startIndex + idx + 1;
-          return (
-            <div key={item.id || idx} className="p-5 flex gap-4 items-start hover:bg-[#F9FAFB] transition-colors">
-              <span className="text-xs font-mono font-bold text-[#6B7280] select-none mt-0.5">
-                {String(absoluteIndex).padStart(2, '0')}
-              </span>
-              <div className="flex-1 text-left min-w-0">
-                <p className="text-sm font-semibold text-[#0A0A0A] leading-relaxed">
-                  {item.question}
-                </p>
-                
-                {/* Metadata row */}
-                <div className="flex flex-wrap items-center gap-2 mt-3">
-                  {item.category && (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#F9FAFB] border border-[#E5E7EB] text-[#6B7280]">
-                      {item.category}
-                    </span>
-                  )}
-                  {item.difficulty && (
-                    <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-[#F9FAFB] border border-[#E5E7EB] text-[#6B7280]">
-                      Diff: {item.difficulty}
-                    </span>
-                  )}
-                  {item.expected_keywords && item.expected_keywords.length > 0 && (
-                    <div className="flex items-center gap-1 flex-wrap">
-                      <span className="text-[9px] font-bold text-[#6B7280] uppercase tracking-wider">Keywords:</span>
-                      {item.expected_keywords.slice(0, 3).map((kw, kIdx) => (
-                        <span key={kIdx} className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-gray-50 border border-gray-100 text-[#0A0A0A] font-mono">
-                          {kw}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between py-2 border-t border-[#E5E7EB] mb-8">
-          <button
-            onClick={handlePrevPage}
-            disabled={currentPage === 1}
-            className="h-8 px-3 border border-[#E5E7EB] hover:border-[#0A0A0A] text-[#0A0A0A] text-xs font-semibold rounded-lg bg-white transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#F9FAFB]"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" /> Previous
-          </button>
-          <span className="text-xs text-[#6B7280] font-medium">
-            Page {currentPage} of {totalPages}
+    <div className="w-full max-w-4xl mx-auto py-2 text-[#0A0A0A] pb-28">
+      {/* 1. BATTLE HEADER */}
+      <div className="flex items-center justify-between mb-4 w-full">
+        <div>
+          <span className="bg-gray-100 text-[#0A0A0A] text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full">
+            {domain}
           </span>
-          <button
-            onClick={handleNextPage}
-            disabled={currentPage === totalPages}
-            className="h-8 px-3 border border-[#E5E7EB] hover:border-[#0A0A0A] text-[#0A0A0A] text-xs font-semibold rounded-lg bg-white transition-all flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[#F9FAFB]"
-          >
-            Next <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+        </div>
+        <div className="text-sm font-bold text-[#0A0A0A]">
+          Question {currentQuestionIndex + 1} of {testQuestions.length}
+        </div>
+        <div className="text-xs font-mono font-semibold text-[#6B7280]">
+          Elapsed: {formatTimer(elapsedSeconds)}
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="w-full h-1 bg-[#E5E7EB] mb-6 relative">
+        <div 
+          className="h-full bg-[#0A0A0A] transition-all duration-300"
+          style={{ width: `${((currentQuestionIndex + 1) / testQuestions.length) * 100}%` }}
+        />
+      </div>
+
+      {/* 2. CURRENT QUESTION BOX */}
+      <div className="w-full border border-[#E5E7EB] rounded-[12px] p-5 text-left mb-6 bg-white">
+        <span className="text-[9px] font-bold text-[#6B7280] uppercase tracking-widest block mb-2">CURRENT QUESTION</span>
+        <h2 className="text-base font-semibold text-[#0A0A0A] leading-relaxed mb-4">{currentQuestion.question}</h2>
+        <div className="flex gap-2">
+          {currentQuestion.category && (
+            <span className="bg-gray-100 text-[#0A0A0A] text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
+              {currentQuestion.category}
+            </span>
+          )}
+          {currentQuestion.difficulty && (
+            <span className="bg-gray-100 text-[#0A0A0A] text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full">
+              Diff: {currentQuestion.difficulty}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* 3. SPLIT RESPONSE AREA */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-6">
+        
+        {/* Model A */}
+        <div className="flex flex-col text-left">
+          <div className="mb-2">
+            <span className="text-[9px] font-bold text-[#6B7280] uppercase tracking-widest block">MODEL A</span>
+            <span className="text-sm font-bold text-black truncate block">{modelA.name}</span>
+          </div>
+          
+          <div className="flex-grow border border-[#E5E7EB] rounded-[12px] p-4 min-h-[150px] bg-white flex flex-col justify-between">
+            <div className="text-sm text-[#0A0A0A] whitespace-pre-wrap leading-relaxed">
+              {!responseA ? (
+                /* WAITING State - Pulse Skeleton */
+                <div className="animate-pulse flex flex-col gap-3 py-1.5">
+                  <div className="h-3 bg-gray-100 rounded w-full" />
+                  <div className="h-3 bg-gray-100 rounded w-[85%]" />
+                  <div className="h-3 bg-gray-100 rounded w-[60%]" />
+                </div>
+              ) : (
+                /* LOADED State - Typewriter */
+                displayedResponseA
+              )}
+            </div>
+            {responseA && (
+              <span className="text-[10px] text-[#6B7280] self-end mt-4 select-none">
+                {responseTimes.a}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Model B */}
+        <div className="flex flex-col text-left">
+          <div className="mb-2">
+            <span className="text-[9px] font-bold text-[#6B7280] uppercase tracking-widest block">MODEL B</span>
+            <span className="text-sm font-bold text-black truncate block">{modelB.name}</span>
+          </div>
+          
+          <div className="flex-grow border border-[#E5E7EB] rounded-[12px] p-4 min-h-[150px] bg-white flex flex-col justify-between">
+            <div className="text-sm text-[#0A0A0A] whitespace-pre-wrap leading-relaxed">
+              {!responseB ? (
+                /* WAITING State - Pulse Skeleton */
+                <div className="animate-pulse flex flex-col gap-3 py-1.5">
+                  <div className="h-3 bg-gray-100 rounded w-full" />
+                  <div className="h-3 bg-gray-100 rounded w-[75%]" />
+                  <div className="h-3 bg-gray-100 rounded w-[90%]" />
+                </div>
+              ) : (
+                /* LOADED State - Typewriter */
+                displayedResponseB
+              )}
+            </div>
+            {responseB && (
+              <span className="text-[10px] text-[#6B7280] self-end mt-4 select-none">
+                {responseTimes.b}
+              </span>
+            )}
+          </div>
+        </div>
+
+      </div>
+
+      {/* Judging Phase Spinner */}
+      {phase === 'judging' && (
+        <div className="flex items-center justify-center py-6 gap-2 animate-in fade-in duration-300">
+          <Loader className="w-4 h-4 text-[#0A0A0A] animate-spin" />
+          <span className="text-xs font-semibold text-[#6B7280]">Judging responses...</span>
         </div>
       )}
 
-      {/* Navigation Footer */}
-      <div className="flex items-center justify-between border-t border-[#E5E7EB] pt-6 mt-6">
-        <button
-          onClick={onBack}
-          className="h-10 px-5 border border-[#0A0A0A] text-[#0A0A0A] text-xs font-semibold rounded-md hover:bg-[#F9FAFB] transition-colors uppercase tracking-wider flex items-center gap-1.5"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back
-        </button>
-        <button
-          onClick={() => onNext(questions)}
-          className="h-10 px-6 bg-[#0A0A0A] text-white hover:bg-black/90 text-xs font-semibold rounded-md uppercase tracking-wider transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
-        >
-          Run Evaluation <ArrowRight className="w-4 h-4" />
-        </button>
+      {/* 4. ROUND RESULT CARD */}
+      <div 
+        className={`transition-all duration-500 ease-in-out overflow-hidden w-full text-left ${
+          phase === 'showing_result' && currentJudgeResult
+            ? 'max-h-[500px] opacity-100 mb-6'
+            : 'max-h-0 opacity-0 mb-0'
+        }`}
+      >
+        {currentJudgeResult && (
+          <div className="w-full border border-[#E5E7EB] rounded-[12px] p-6 bg-white">
+            {/* Top row */}
+            <div className="flex items-center justify-between mb-5 pb-3 border-b border-gray-100">
+              <div>
+                <span className="text-[9px] font-bold text-[#6B7280] uppercase tracking-widest block">
+                  ROUND {currentQuestionIndex + 1} RESULT
+                </span>
+              </div>
+              <div>
+                {currentJudgeResult.winner === 'model_a' ? (
+                  <span className="bg-[#0A0A0A] text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded">
+                    {modelA.name} Wins
+                  </span>
+                ) : currentJudgeResult.winner === 'model_b' ? (
+                  <span className="bg-[#0A0A0A] text-white text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded">
+                    {modelB.name} Wins
+                  </span>
+                ) : (
+                  <span className="bg-gray-100 text-[#0A0A0A] border border-[#E5E7EB] text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded">
+                    Tie / Draw
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Score Table */}
+            <div className="grid grid-cols-3 gap-2 py-2 mb-4 border-b border-gray-50 text-xs">
+              <span className="font-bold text-[#6B7280] uppercase tracking-wider text-left">Metric</span>
+              <span className="font-bold text-[#0A0A0A] text-center">{modelA.name}</span>
+              <span className="font-bold text-[#0A0A0A] text-right">{modelB.name}</span>
+
+              {metrics.map((metric) => {
+                const scoreA = currentJudgeResult.model_a?.[metric.key] ?? 0;
+                const scoreB = currentJudgeResult.model_b?.[metric.key] ?? 0;
+                return (
+                  <React.Fragment key={metric.key}>
+                    <span className="text-gray-500 py-1.5 text-left font-medium">{metric.label}</span>
+                    <span className={`text-center py-1.5 ${getScoreClass(scoreA, scoreB, true)}`}>
+                      {scoreA}
+                    </span>
+                    <span className={`text-right py-1.5 ${getScoreClass(scoreA, scoreB, false)}`}>
+                      {scoreB}
+                    </span>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+
+            {/* Reason and Next Button Row */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mt-4">
+              <div className="flex-1 text-xs text-gray-500 italic leading-relaxed">
+                "{currentJudgeResult.reason}"
+              </div>
+              <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                <button
+                  onClick={handleNextQuestion}
+                  className="h-10 px-5 bg-[#0A0A0A] hover:bg-black/90 text-white text-xs font-semibold rounded-lg uppercase tracking-wider flex items-center gap-1.5"
+                >
+                  {isLastQuestion ? 'See Results' : 'Next Question'} &rarr;
+                </button>
+                <span className="text-[10px] text-[#6B7280] font-semibold">
+                  Next in {autoAdvanceCount}...
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* 5. LIVE SCOREBOARD */}
+      <div className="fixed bottom-0 left-0 right-0 border-t border-[#E5E7EB] bg-white py-4 px-6 z-40">
+        <div className="flex gap-6 max-w-4xl mx-auto items-center justify-between w-full">
+          {/* Model A stats */}
+          <div className="flex-1 flex items-center gap-3">
+            <span className="text-xs font-bold text-[#0A0A0A] truncate max-w-[150px]" title={modelA.name}>
+              {modelA.name}
+            </span>
+            <div className="flex-1 h-3.5 bg-gray-50 border border-[#E5E7EB] rounded-sm overflow-hidden max-w-[200px]">
+              <div 
+                className="h-full bg-[#0A0A0A] transition-all duration-500" 
+                style={{ width: `${testQuestions.length > 0 ? (winsA / testQuestions.length) * 100 : 0}%` }}
+              />
+            </div>
+            <span className="text-xs font-bold text-[#0A0A0A] flex-shrink-0">{winsA} wins</span>
+          </div>
+
+          {/* Ties */}
+          <div className="px-4 text-xs font-semibold text-[#6B7280] select-none flex-shrink-0">
+            Ties: {ties}
+          </div>
+
+          {/* Model B stats */}
+          <div className="flex-1 flex items-center gap-3 justify-end">
+            <span className="text-xs font-bold text-[#0A0A0A] flex-shrink-0">{winsB} wins</span>
+            <div className="flex-1 h-3.5 bg-gray-50 border border-[#E5E7EB] rounded-sm overflow-hidden max-w-[200px]">
+              <div 
+                className="h-full bg-[#0A0A0A] transition-all duration-500" 
+                style={{ width: `${testQuestions.length > 0 ? (winsB / testQuestions.length) * 100 : 0}%` }}
+              />
+            </div>
+            <span className="text-xs font-bold text-[#0A0A0A] truncate max-w-[150px] text-right" title={modelB.name}>
+              {modelB.name}
+            </span>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

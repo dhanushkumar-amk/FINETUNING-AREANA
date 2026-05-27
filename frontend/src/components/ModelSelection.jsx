@@ -26,8 +26,8 @@ export default function ModelSelection({
   const [popularModels, setPopularModels] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const [activeCategoryA, setActiveCategoryA] = useState('');
-  const [activeCategoryB, setActiveCategoryB] = useState('');
+  const [activeCategoryA, setActiveCategoryA] = useState('text-generation');
+  const [activeCategoryB, setActiveCategoryB] = useState('text-generation');
 
   const [customId, setCustomId] = useState('');
   const [validationLoading, setValidationLoading] = useState(false);
@@ -58,7 +58,7 @@ export default function ModelSelection({
 
   // Fetch initial popular models from HuggingFace on mount
   useEffect(() => {
-    fetch('https://huggingface.co/api/models?limit=10&sort=downloads&direction=-1')
+    fetch('https://huggingface.co/api/models?limit=10&sort=downloads&direction=-1&filter=text-generation')
       .then(res => res.json())
       .then(data => {
         const models = data.map(m => ({

@@ -28,6 +28,7 @@ export default function Arena() {
     setDomain,
     setBattleConfig,
     setTestQuestions,
+    setBattleResults,
     setLoading,
     setStage
   } = useBattleStore();
@@ -191,13 +192,13 @@ export default function Arena() {
             <LiveBattle
               modelA={modelA}
               modelB={modelB}
-              datasetConfig={battleConfig}
-              onNext={(questionsList) => {
-                setTestQuestions(questionsList);
+              domain={domain || 'Text Generation'}
+              testQuestions={testQuestions}
+              onBattleComplete={(results) => {
+                setBattleResults(results);
                 setStage(4);
               }}
               onBack={handleBack}
-              domain={domain || 'Text Generation'}
             />
           </div>
         )}
