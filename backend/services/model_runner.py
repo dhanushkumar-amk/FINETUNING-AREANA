@@ -2,6 +2,8 @@ import os
 import socket
 import requests
 import urllib3
+import ssl
+import certifi
 from groq import Groq
 from dotenv import load_dotenv
 
@@ -87,7 +89,7 @@ def run_model_hf(model_id: str, question: str, max_tokens: int = 300) -> dict:
                 "do_sample": True
             }
         }
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response = requests.post(url, headers=headers, json=payload, timeout=30, verify=certifi.where())
         try:
             data = response.json()
         except Exception:
