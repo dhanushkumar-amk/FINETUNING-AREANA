@@ -1,5 +1,40 @@
-import os
+import socket
 import requests
+
+original_getaddrinfo = socket.getaddrinfo
+
+def custom_resolve(host):
+    """
+    Bypasses broken system DNS resolvers by querying Google's 
+    Public DNS HTTP API directly using the raw IP 8.8.8.8.
+    """
+    if host == "api-inference.huggingface.co":
+        try:
+            url = "http://8.8.8.8/resolve?name=api-inference.huggingface.co&type=A"
+            r = requests.get(url, timeout=5)
+            data = r.json()
+            ips = []
+            if "Answer" in data:
+                for ans in data["Answer"]:
+                    if ans.get("type") == 1:  # A record type
+                        ips.append(ans["data"])
+            if ips:
+                return ips[0]
+        except Exception as e:
+            print(f"Custom DNS-over-HTTP resolution failed: {e}")
+    return None
+
+def patched_getaddrinfo(host, port, *args, **kwargs):
+    if host == "api-inference.huggingface.co":
+        ip = custom_resolve(host)
+        if ip:
+            return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', (ip, port))]
+    return original_getaddrinfo(host, port, *args, **kwargs)
+
+# Inject the patch
+socket.getaddrinfo = patched_getaddrinfo
+
+import os
 from dotenv import load_dotenv
 
 # Load environment variables
