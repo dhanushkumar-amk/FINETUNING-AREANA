@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Cpu, Search, Globe, Code, ShieldAlert, Heart, HardDrive, AlertCircle, ArrowDown, ThumbsUp, Layers, CheckCircle } from 'lucide-react';
+import { Cpu, Search, Globe, Code, ShieldAlert, Heart, HardDrive, AlertCircle, ArrowDown, ThumbsUp, Layers, CheckCircle, X } from 'lucide-react';
+import { validateModel } from '../api/battleApi';
 
 const CATEGORIES = [
   { id: '', label: 'All Tasks' },
@@ -14,7 +15,7 @@ const CATEGORIES = [
 export default function ModelSelection({
   modelA, setModelA,
   modelB, setModelB,
-  onSuccess
+  onConnect
 }) {
   // Track which slot is actively being configured ('A', 'B', or null)
   const [activeSlot, setActiveSlot] = useState(null);
@@ -31,6 +32,7 @@ export default function ModelSelection({
   const [customId, setCustomId] = useState('');
   const [validationLoading, setValidationLoading] = useState(false);
   const [validationError, setValidationError] = useState('');
+  const [validationStatus, setValidationStatus] = useState(null); // 'valid', 'loading', 'invalid'
 
   const bothSelected = modelA && modelB;
   const connectEnabled = modelA && modelB;
@@ -117,44 +119,73 @@ export default function ModelSelection({
   const setActiveCategory = activeSlot === 'A' ? setActiveCategoryA : setActiveCategoryB;
 
   // Validate custom pasted HuggingFace ID
-  const handleValidateCustom = () => {
+  const handleValidateCustom = async () => {
     if (!customId.trim()) return;
     setValidationLoading(true);
+    setValidationStatus(null);
     setValidationError('');
     
-    fetch(`https://huggingface.co/api/models/${customId.trim()}`)
-      .then(res => {
-        if (!res.ok) throw new Error("Model not found on HuggingFace");
-        return res.json();
-      })
-      .then(data => {
-        const modelObj = {
-          id: data.id,
-          name: data.id.split('/').pop(),
-          author: data.id.split('/')[0] || 'HF',
-          downloads: data.downloads || 0,
-          likes: data.likes || 0,
-          license: parseLicense(data.tags),
-          pipeline: data.pipeline_tag || 'Unknown',
+    try {
+      const result = await validateModel(customId.trim());
+      
+      if (!result) {
+        setValidationStatus('invalid');
+        setValidationError("Validation service failed");
+        setValidationLoading(false);
+        return;
+      }
+
+      if (result.valid) {
+        const statusType = result.status === 'loading' ? 'loading' : 'valid';
+        setValidationStatus(statusType);
+        
+        // Fetch detailed HF info for UI metadata tables if available
+        let modelObj = {
+          id: customId.trim(),
+          name: customId.trim().split('/').pop(),
+          author: customId.trim().split('/')[0] || 'HF',
+          downloads: 0,
+          likes: 0,
+          license: 'Unknown',
+          pipeline: 'Text Generation',
           domain: 'Custom'
         };
-        
+
+        try {
+          const hfRes = await fetch(`https://huggingface.co/api/models/${customId.trim()}`);
+          if (hfRes.ok) {
+            const data = await hfRes.json();
+            modelObj = {
+              id: data.id,
+              name: data.id.split('/').pop(),
+              author: data.id.split('/')[0] || 'HF',
+              downloads: data.downloads || 0,
+              likes: data.likes || 0,
+              license: parseLicense(data.tags),
+              pipeline: data.pipeline_tag || 'Unknown',
+              domain: 'Custom'
+            };
+          }
+        } catch (e) {
+          console.error("Failed to fetch HF API metadata, using defaults:", e);
+        }
+
         if (activeSlot === 'A') {
           setModelA(modelObj);
         } else {
           setModelB(modelObj);
         }
-        
-        // Reset console state
-        setActiveSlot(null);
-        setCustomId('');
-        setValidationError('');
-        setValidationLoading(false);
-      })
-      .catch(err => {
-        setValidationError(err.message);
-        setValidationLoading(false);
-      });
+      } else {
+        setValidationStatus('invalid');
+        setValidationError(result.error || "Model not found on HuggingFace");
+      }
+    } catch (err) {
+      setValidationStatus('invalid');
+      setValidationError("Failed to connect to validation server");
+      console.error(err);
+    } finally {
+      setValidationLoading(false);
+    }
   };
 
   const handleSelectModel = (model) => {
@@ -552,18 +583,47 @@ export default function ModelSelection({
                   type="text"
                   placeholder="e.g. meta-llama/Llama-3-8B-Instruct"
                   value={customId}
-                  onChange={(e) => setCustomId(e.target.value)}
+                  onChange={(e) => {
+                    setCustomId(e.target.value);
+                    setValidationStatus(null);
+                    setValidationError('');
+                  }}
                   className="flex-grow min-w-0 h-11 border border-gray-200 rounded-[12px] px-4 text-sm text-[#0A0A0A] focus:border-black focus:ring-1 focus:ring-black focus:outline-none transition-all"
                 />
                 <button
                   onClick={handleValidateCustom}
                   disabled={validationLoading}
-                  className="h-11 px-5 border border-black text-black text-xs font-semibold rounded-[12px] hover:bg-gray-50 transition-colors uppercase tracking-wider flex-shrink-0 disabled:opacity-50"
+                  className="h-11 px-5 border border-black text-black text-xs font-semibold rounded-[12px] hover:bg-gray-50 transition-colors uppercase tracking-wider flex-shrink-0 disabled:opacity-50 flex items-center justify-center gap-2"
                 >
+                  {validationLoading && (
+                    <span className="animate-spin border-2 border-black border-t-transparent rounded-full w-4 h-4" />
+                  )}
                   {validationLoading ? 'Validating...' : 'Validate ID'}
                 </button>
               </div>
-              {validationError && (
+              
+              {/* Validation Status Icons & Text */}
+              {validationStatus && (
+                <div className="mt-3 text-[11px] font-semibold flex items-center gap-1.5">
+                  {validationStatus === 'valid' && (
+                    <span className="text-green-600 flex items-center gap-1">
+                      <CheckCircle className="w-4 h-4" /> Model found ✓
+                    </span>
+                  )}
+                  {validationStatus === 'loading' && (
+                    <span className="text-yellow-600 flex items-center gap-1">
+                      <AlertCircle className="w-4 h-4" /> Model found but still loading
+                    </span>
+                  )}
+                  {validationStatus === 'invalid' && (
+                    <span className="text-red-600 flex items-center gap-1">
+                      <X className="w-4 h-4" /> {validationError || "Model not found on HuggingFace"}
+                    </span>
+                  )}
+                </div>
+              )}
+              
+              {!validationStatus && validationError && (
                 <div className="text-[11px] text-red-500 mt-3 p-2 bg-red-50 rounded-lg border border-red-100/50 flex items-center gap-1.5">
                   <AlertCircle className="w-3.5 h-3.5" /> {validationError}
                 </div>
@@ -651,7 +711,10 @@ export default function ModelSelection({
       <div className="flex justify-center mt-12">
         <button
           disabled={!connectEnabled}
-          onClick={onSuccess}
+          onClick={() => {
+            const domainVal = modelA?.pipeline || 'Text Generation';
+            onConnect(modelA, modelB, domainVal);
+          }}
           className={`h-11 w-[240px] text-xs font-semibold rounded-[12px] uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-1.5 ${
             connectEnabled 
               ? 'bg-[#0A0A0A] text-white hover:bg-black/90 cursor-pointer shadow-md' 

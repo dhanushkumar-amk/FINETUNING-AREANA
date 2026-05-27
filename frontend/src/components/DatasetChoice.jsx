@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Sparkles, Upload, PenLine, Check, Plus, ArrowLeft, ArrowRight, X, Settings, Trash2 } from 'lucide-react';
 
-export default function DatasetChoice({ onNext, onBack, domain }) {
+export default function DatasetChoice({ onStartBattle, onBack, domain }) {
   // Config state variables
   const [selectedOption, setSelectedOption] = useState(null);
   
@@ -75,22 +75,15 @@ export default function DatasetChoice({ onNext, onBack, domain }) {
     if (!isValid()) return;
 
     const config = {
-      type: selectedOption,
-      ...(selectedOption === 'auto' && {
-        questionCount,
-        difficulty,
-        questionTypes
-      }),
-      ...(selectedOption === 'upload' && {
-        fileName: uploadedFile.name,
-        fileSize: uploadedFile.size
-      }),
-      ...(selectedOption === 'manual' && {
-        questions: manualQuestions.filter((q) => q.trim() !== '')
-      })
+      option: selectedOption,
+      questionCount: questionCount,
+      difficulty: difficulty,
+      questionTypes: questionTypes,
+      uploadedFile: uploadedFile,
+      manualQuestions: manualQuestions
     };
 
-    onNext(config);
+    onStartBattle(config);
   };
 
   return (
