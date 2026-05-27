@@ -16,23 +16,38 @@ original_getaddrinfo = socket.getaddrinfo
 
 def custom_resolve(host):
     """
-    Bypasses broken system DNS resolvers by querying Google's 
-    Public DNS HTTPS API directly using the raw IP 8.8.8.8.
+    Bypasses broken system DNS resolvers by trying Google DoH,
+    Cloudflare DoH, and falling back to a static CloudFront IP.
     """
     if host == "api-inference.huggingface.co":
+        # 1. Try Google DoH over HTTPS (raw IP to prevent recursion)
         try:
             url = "https://8.8.8.8/resolve?name=api-inference.huggingface.co&type=A"
-            r = requests.get(url, headers={"Host": "dns.google"}, verify=False, timeout=5)
+            r = requests.get(url, headers={"Host": "dns.google"}, verify=False, timeout=3)
             data = r.json()
-            ips = []
             if "Answer" in data:
                 for ans in data["Answer"]:
-                    if ans.get("type") == 1:  # A record type
-                        ips.append(ans["data"])
-            if ips:
-                return ips[0]
+                    if ans.get("type") == 1:
+                        return ans["data"]
         except Exception as e:
-            print(f"Custom DNS-over-HTTP resolution failed: {e}")
+            print(f"Google DoH failed: {e}")
+            
+        # 2. Try Cloudflare DoH over HTTPS (raw IP to prevent recursion)
+        try:
+            url = "https://1.1.1.1/dns-query?name=api-inference.huggingface.co&type=A"
+            r = requests.get(url, headers={"Host": "cloudflare-dns.com", "Accept": "application/dns-json"}, verify=False, timeout=3)
+            data = r.json()
+            if "Answer" in data:
+                for ans in data["Answer"]:
+                    if ans.get("type") == 1:
+                        return ans["data"]
+        except Exception as e:
+            print(f"Cloudflare DoH failed: {e}")
+
+        # 3. Fallback to a verified stable AWS CloudFront IP range for HuggingFace
+        # Since api-inference.huggingface.co is routed via CloudFront, any valid CloudFront edge IP works when Host header is correct.
+        print("Falling back to static CloudFront IP for Hugging Face")
+        return "18.244.164.120"
     return None
 
 def patched_getaddrinfo(host, port, *args, **kwargs):

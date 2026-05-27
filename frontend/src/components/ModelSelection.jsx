@@ -58,7 +58,7 @@ export default function ModelSelection({
 
   // Fetch initial popular models from HuggingFace on mount
   useEffect(() => {
-    fetch('https://huggingface.co/api/models?limit=10&sort=downloads&direction=-1&filter=text-generation')
+    fetch('https://huggingface.co/api/models?limit=100&sort=downloads&direction=-1&filter=text-generation')
       .then(res => res.json())
       .then(data => {
         const models = data.map(m => ({
@@ -82,7 +82,7 @@ export default function ModelSelection({
     setIsLoading(true);
     const activeCategory = activeSlot === 'A' ? activeCategoryA : activeCategoryB;
     
-    let url = `https://huggingface.co/api/models?limit=30&sort=downloads&direction=-1`;
+    let url = `https://huggingface.co/api/models?limit=100&sort=downloads&direction=-1`;
     if (searchQuery.trim()) {
       url += `&search=${encodeURIComponent(searchQuery.trim())}`;
     }
