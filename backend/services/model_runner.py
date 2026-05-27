@@ -1,13 +1,16 @@
+import os
 import socket
 import requests
+from groq import Groq
+from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
+
+# Custom DNS-over-HTTP (DoH) resolver patch for HuggingFace
 original_getaddrinfo = socket.getaddrinfo
 
 def custom_resolve(host):
-    """
-    Bypasses broken system DNS resolvers by querying Google's 
-    Public DNS HTTP API directly using the raw IP 8.8.8.8.
-    """
     if host == "api-inference.huggingface.co":
         try:
             url = "http://8.8.8.8/resolve?name=api-inference.huggingface.co&type=A"
@@ -16,7 +19,7 @@ def custom_resolve(host):
             ips = []
             if "Answer" in data:
                 for ans in data["Answer"]:
-                    if ans.get("type") == 1:  # A record type
+                    if ans.get("type") == 1:
                         ips.append(ans["data"])
             if ips:
                 return ips[0]
@@ -31,45 +34,29 @@ def patched_getaddrinfo(host, port, *args, **kwargs):
             return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', (ip, port))]
     return original_getaddrinfo(host, port, *args, **kwargs)
 
-# Inject the patch
 socket.getaddrinfo = patched_getaddrinfo
 
-import os
-from dotenv import load_dotenv
+# Known Groq models list
+GROQ_MODELS = {
+    "llama-3.1-8b-instant",
+    "llama-3.3-70b-versatile",
+    "llama3-8b-8192",
+    "llama3-70b-8192",
+    "mixtral-8x7b-32768",
+    "gemma2-9b-it"
+}
 
-# Load environment variables
-load_dotenv()
-
-def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
-    """
-    Runs a single question against a HuggingFace Inference API model.
-    """
+def run_model_hf(model_id: str, question: str, max_tokens: int = 300) -> dict:
+    """Runs model using Hugging Face Inference API."""
     try:
-        if not question:
-            raise ValueError("Question cannot be empty.")
-            
-        sanitized_question = question.strip()
-        if not sanitized_question:
-            raise ValueError("Question cannot be empty after stripping whitespace.")
-            
-        if len(sanitized_question) > 500:
-            sanitized_question = sanitized_question[:500]
-            
-        # 1. Load HF_TOKEN from environment
         hf_token = os.getenv("HF_TOKEN", "")
-        
-        # 2. Build the API URL
         url = f"https://api-inference.huggingface.co/models/{model_id}"
-        
-        # 3. Set headers:
         headers = {
             "Authorization": f"Bearer {hf_token}",
             "Content-Type": "application/json"
         }
-        
-        # 4. Build payload
         payload = {
-            "inputs": sanitized_question,
+            "inputs": question,
             "parameters": {
                 "max_new_tokens": max_tokens,
                 "temperature": 0.7,
@@ -77,20 +64,13 @@ def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
                 "do_sample": True
             }
         }
-        
-        # 5. Make POST request using requests library (timeout: 30 seconds)
         response = requests.post(url, headers=headers, json=payload, timeout=30)
-        
-        # Parse response as JSON if possible
         try:
             data = response.json()
         except Exception:
-            # If not JSON, check status code and raise
             response.raise_for_status()
             raise ValueError(f"HuggingFace API response was not JSON: {response.text}")
             
-        # 6. Handle response formats:
-        # Case 5: model still loading
         if isinstance(data, dict) and "error" in data:
             error_msg = data["error"]
             if isinstance(error_msg, str) and "is currently loading" in error_msg:
@@ -100,7 +80,6 @@ def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
                     "is_loading": True,
                     "error": "Model is loading, retry in 20 seconds"
                 }
-            # Other API error
             return {
                 "response": None,
                 "model_id": model_id,
@@ -108,11 +87,6 @@ def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
                 "error": error_msg
             }
             
-        # Case 1: list with generated_text
-        # Case 2: list with translation_text
-        # Case 3: list with summary_text
-        # Case 4: dict with generated_text
-        # Case 6: fallback
         answer_text = None
         if isinstance(data, list) and len(data) > 0:
             item = data[0]
@@ -136,9 +110,67 @@ def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
             "is_loading": False,
             "error": None
         }
-        
     except Exception as e:
-        print(f"Error running model '{model_id}': {e}")
+        print(f"HuggingFace API error: {e}")
+        return {
+            "response": None,
+            "model_id": model_id,
+            "is_loading": False,
+            "error": str(e)
+        }
+
+def run_model_groq(model_id: str, question: str, max_tokens: int = 300) -> dict:
+    """Runs model using Groq API."""
+    try:
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            raise ValueError("GROQ_API_KEY environment variable is not set.")
+        client = Groq(api_key=api_key)
+        chat_completion = client.chat.completions.create(
+            model=model_id,
+            messages=[{"role": "user", "content": question}],
+            max_tokens=max_tokens,
+            temperature=0.7
+        )
+        response_text = chat_completion.choices[0].message.content
+        return {
+            "response": response_text,
+            "model_id": model_id,
+            "is_loading": False,
+            "error": None
+        }
+    except Exception as e:
+        print(f"Groq API error: {e}")
+        return {
+            "response": None,
+            "model_id": model_id,
+            "is_loading": False,
+            "error": str(e)
+        }
+
+def run_model(model_id: str, question: str, max_tokens: int = 300) -> dict:
+    """
+    Runs a single question against either Groq or HuggingFace depending on the model_id.
+    """
+    try:
+        if not question:
+            raise ValueError("Question cannot be empty.")
+            
+        sanitized_question = question.strip()
+        if not sanitized_question:
+            raise ValueError("Question cannot be empty after stripping whitespace.")
+            
+        if len(sanitized_question) > 500:
+            sanitized_question = sanitized_question[:500]
+            
+        # Route based on model ID
+        if model_id in GROQ_MODELS:
+            return run_model_groq(model_id, sanitized_question, max_tokens)
+        else:
+            return run_model_hf(model_id, sanitized_question, max_tokens)
+            
+    except Exception as e:
+        print(f"Error in run_model for '{model_id}': {e}")
         return {
             "response": None,
             "model_id": model_id,

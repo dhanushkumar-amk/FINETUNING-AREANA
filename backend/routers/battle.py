@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from services.generator import generate_test_cases
-from services.model_runner import run_model, run_both_models
+from services.model_runner import run_model, run_both_models, GROQ_MODELS
 
 router = APIRouter(prefix="/api/battle", tags=["battle"])
 
@@ -65,10 +65,11 @@ def validate_model(payload: ValidateModelRequest):
         }
     
     if result["error"] is not None:
+        provider = "Groq" if payload.model_id in GROQ_MODELS else "HuggingFace"
         return {
             "valid": False,
             "model_id": payload.model_id,
-            "error": "Model not found on HuggingFace"
+            "error": f"Model not found on {provider}"
         }
         
     return {
